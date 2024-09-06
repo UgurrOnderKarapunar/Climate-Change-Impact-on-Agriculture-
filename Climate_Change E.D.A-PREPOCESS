@@ -1,0 +1,225 @@
+import pandas as pd
+import plotly.express as px
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import accuracy_score
+from sklearn.impute import SimpleImputer
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import LabelEncoder
+import seaborn as sns
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from keras.layers import Dense, Input
+pd.set_option('display.max_columns', None) 
+pd.set_option('display.max_rows', None)     
+pd.set_option('display.max_seq_item', None) # 
+pd.set_option('display.float_format', '{:.2f}'.format)  
+df = pd.read_csv("/kaggle/input/climate-change-impact-on-agriculture/climate_change_impact_on_agriculture_2024.csv")
+
+
+DATA OVERVIEW AND E.D.A
+
+
+
+### Verinin ilk 10 gözlemi-First 10 observations of the data
+### Hedef değişkenimiz "Economic_Impact_Million_USD" değişkeni-Our target variable is 'Economic_Impact_Million_USD' variable
+df.head(10)
+
+
+df.info()
+
+# Toplamda 10000 gözlem birimi ve 15 değişken verisetinde bulunmakta-
+# There are a total of 10000 observation units and 15 variables in the dataset.
+
+df.isnull().sum()
+
+# Veride boş değer bulunmamakta
+# There are no null values in the data
+
+df.duplicated().sum()
+
+# Veride duplica değer de yok
+# There is no duplicate value in the data
+
+### Sayısal Verilerin temel istatistik bilgileri-Basic statistical information of Numerical Data
+
+df.describe().T
+
+Sonuç:
+
+1) Veri 10000 veri setinden ve 15 değişkende oluşmakta bunların 5 tanesi sayısal olmayan geri kalanlar sayılsal değişkendir. 2) Veride boş ve duplica gözlemler yoktur
+
+Conclusion:
+
+1) The data consists of 10000 data sets and 15 variables, 5 of which are non-numeric and the rest are numerical variables. 2) There are no empty or duplicate observations in the data
+
+
+#**Veriyi daha kolay anlamlandırabilmek için veriyi X,y değişkenleri ayırıyoruz-In order to make sense of the data more easily, we separate the data into X,y variables.**
+
+
+X=df.drop("Economic_Impact_Million_USD",axis=1)
+y=df["Economic_Impact_Million_USD"]
+
+ # Kategorik ve sayısal değişkenlerin bulunması-Finding categorical and numerical variables
+
+
+cat=X.select_dtypes(include="object").columns
+numerical=X.select_dtypes(include=["int","float"]).columns
+
+print(f"Categorical Col:{cat}")
+print(f"Numerical Col:{numerical}")
+
+
+# Hedef değişkenin görselleştirilmesi--Visualization of the target variable
+
+sns.set(style="whitegrid")
+
+plt.figure(figsize=(14, 10))
+
+# 1. Histogram
+plt.subplot(2, 2, 1)
+sns.histplot(df["Economic_Impact_Million_USD"], kde=False, color="skyblue")
+plt.title("Histogram of Economic Impact")
+plt.xlabel("Economic Impact (Million USD)")
+plt.ylabel("Frequency")
+
+# 2. Boxplot
+plt.subplot(2, 2, 2)
+sns.boxplot(x=df["Economic_Impact_Million_USD"], color="lightgreen")
+plt.title("Boxplot of Economic Impact")
+plt.xlabel("Economic Impact (Million USD)")
+
+# 3. Violin Plot
+plt.subplot(2, 2, 3)
+sns.violinplot(y=df["Economic_Impact_Million_USD"], palette="muted", inner="box")
+plt.title("Violin Plot of Economic Impact")
+plt.ylabel("Economic Impact (Million USD)")
+
+# 4. KDE Plot
+plt.subplot(2, 2, 4)
+sns.kdeplot(df["Economic_Impact_Million_USD"], shade=True, color="coral")
+plt.title("KDE of Economic Impact")
+plt.xlabel("Economic Impact (Million USD)")
+plt.ylabel("Density")
+
+plt.tight_layout()
+
+plt.show()
+
+
+
+# Örnek olarak 4 değişkenin  görselleştirilmesi-For example, visualization of 4 variables
+
+
+###  *** Country *** 
+sns.set(style="whitegrid")
+
+plt.figure(figsize=(12, 8))
+
+sns.countplot(y=X["Country"], order=X["Country"].value_counts().index, palette="viridis")
+
+plt.title("Distribution of Countries in the Dataset", fontsize=16)
+plt.xlabel("Count")
+plt.ylabel("Country")
+
+plt.show()
+
+
+
+### *** REGION *** 
+region_counts = X['Region'].value_counts().reset_index()
+region_counts.columns = ['Region', 'Count']
+
+fig = px.treemap(region_counts, path=['Region'], values='Count',
+                 color='Count', hover_data=['Region'],
+                 color_continuous_scale='Viridis',
+                 title='Treemap of Regions')
+
+fig.show()
+
+
+### *** YEAR *** 
+plt.figure(figsize=(10, 6))
+plt.hist(X['Year'], bins=20, color='blue', edgecolor='black')
+plt.title('Distribution of Years')
+plt.xlabel('Year')
+plt.ylabel('Frequency')
+plt.show()
+
+
+plt.figure(figsize=(10, 6))
+sns.histplot(X["Average_Temperature_C"], bins=30, kde=True, color='blue')
+plt.title('Average Temperature Distribution')
+plt.xlabel('Average Temperature (°C)')
+plt.ylabel('Frequency')
+plt.grid(True)
+plt.show()
+
+
+#  Kategorik verilerde baskınlık değerlerinin bulunması- Finding dominance values in categorical data
+
+for col in cat:
+    dominant=X[col].value_counts(normalize=True)
+    print(dominant)
+
+
+# BETİMSEL İSTATİSTİK--DESCRIPTIVE STATISTICS
+
+correlation_matrix = X[numerical].corr()
+print(correlation_matrix)
+plt.figure(figsize=(12, 8))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f', vmin=-1, vmax=1)
+plt.title('Correlation Heatmap')
+plt.show()
+import scipy.stats as stats
+
+# Q-Q grafiği çizme
+plt.figure(figsize=(12, 12))
+for col in numerical:
+    plt.subplot(len(numerical), 1, numerical.get_loc(col) + 1)
+    stats.probplot(X[col], dist="norm", plot=plt)
+    plt.title(f'Q-Q Plot of {col}')
+
+plt.tight_layout()
+plt.show()
+
+### NORMALLİK TESTİ-NORMALITY TEST
+from scipy.stats import shapiro
+
+# Shapiro-Wilk testi
+for col in numerical:
+    stat, p_value = shapiro(X[col].dropna())
+    print(f'{col}: Statistics={stat:.3f}, p-value={p_value:.3f}')
+    if p_value > 0.05:
+        print(f"{col} dağılımı normal dağılıma uygun")
+    else:
+        print(f"{col} dağılımı normal dağılıma uygun değil")
+
+
+def plot_histogram_qq(data, col_name):
+    plt.figure(figsize=(12, 6))
+    
+    # Histogram
+    plt.subplot(1, 2, 1)
+    plt.hist(data, bins=30, edgecolor='k', alpha=0.7)
+    plt.title(f'Histogram of {col_name}')
+    plt.xlabel(col_name)
+    plt.ylabel('Frequency')
+    
+    # Q-Q Plot
+    plt.subplot(1, 2, 2)
+    stats.probplot(data, dist="norm", plot=plt)
+    plt.title(f'Q-Q Plot of {col_name}')
+    
+    plt.tight_layout()
+    plt.show()
+
+for col in numerical:
+    plot_histogram_qq(X[col].dropna(), col)
