@@ -1,0 +1,57 @@
+def keras_pipeline(dataframe, target):
+    cat_pipeline = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='most_frequent')),  # Eksik değerleri doldurma
+        ('encoder', OneHotEncoder(handle_unknown='ignore'))  # One-hot encoding
+    ])
+    
+    num_pipeline = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='median')),  # Eksik değerleri median ile doldurma
+        ('scaler', RobustScaler())  # Ölçeklendirme
+    ])
+    
+    preprocessor = ColumnTransformer(transformers=[
+        ('num', num_pipeline, numerical),
+        ('cat', cat_pipeline, cat)
+    ])
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+    
+    # Veriyi dönüştür
+    X_train_prepared = preprocessor.fit_transform(X_train)
+    X_test_prepared = preprocessor.transform(X_test)
+    
+    model = Sequential([
+        Dense(64, activation='relu', input_shape=(X_train_prepared.shape[1],)),
+        Dense(32, activation='relu'),
+        Dense(1, activation='linear')  
+    ])
+    
+    model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
+    
+    # Modeli eğit ve sonuçları kaydet
+    history = model.fit(X_train_prepared, y_train, epochs=10, batch_size=32, validation_split=0.25)
+    
+    # Modeli test seti ile değerlendir
+    test_loss, test_accuracy = model.evaluate(X_test_prepared, y_test)
+    print(f"Test Loss: {test_loss}")
+    print(f"Test Accuracy: {test_accuracy}")
+    y_pred = model.predict(X_test_prepared)
+
+    mse = mean_squared_error(y_test, y_pred)
+    print(f'MSE: {mse:.2f}')
+
+    mae = mean_absolute_error(y_test, y_pred)
+    print(f'MAE: {mae:.2f}')
+
+    rmse = np.sqrt(mse)
+    print(f'RMSE: {rmse:.2f}')
+    plt.figure(figsize=(12, 6))
+    plt.plot(history.history['mae'], label='Training MAE')
+    plt.plot(history.history['val_mae'], label='Validation MAE')
+    plt.xlabel('Epoch')
+    plt.ylabel('Mean Absolute Error')
+    plt.legend()
+    plt.title('MAE During Training')
+    plt.show()
+
+keras_pipeline(df, "Economic_Impact_Million_USD")
